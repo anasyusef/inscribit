@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
+
 from fastapi import HTTPException
 
 from config import app, session
@@ -15,6 +16,7 @@ from utils import (
     parse_transaction_data,
     update_order_status,
 )
+from tasks import inscribe
 
 
 @app.on_event("startup")
@@ -26,7 +28,7 @@ async def startup_event():
         session.auth = tuple(auth)
 
 
-@app.get("/process/{tx_id}")
+@app.post("/process/{tx_id}")
 async def process(tx_id):
     json_res = get_transaction(tx_id)
 
@@ -35,20 +37,22 @@ async def process(tx_id):
 
     parsed_rpc_data = parse_transaction_data(json_res)
 
-    # "bc1ptljmlzfar6krh98l8j79kwvspx0rj8uhpagf0t9h2hc3w724lyds9kjc7l"
-    result_order = get_order_with_assigned_address(parsed_rpc_data["address"])
-    print(result_order)
+    order_result = get_order_with_assigned_address(
+        "bc1pv99ggzqh2dgw5z4enaf7sfw2rhw2cuc08g8gllpv75puwxt3mf8ske27t5"
+    )
+    # result_order = get_order_with_assigned_address(parsed_rpc_data["address"])
+    print(order_result)
 
-    if result_order.data:
-        order = result_order.data[0]
+    if order_result.data:
+        order = order_result.data[0]
         status = order["status"]
-        insert_tx(order["id"], tx_id, parsed_rpc_data)
+        # insert_tx(order["id"], tx_id, parsed_rpc_data)
         data = get_all_txs_from_order_id(order["id"])
         total_received_sats = sum(
             [item["amount_sats"] if item["confirmations"] > 0 else 0 for item in data]
         )
 
-        print(total_received_sats)
+        print(f"Total received from order {order['id']}: {total_received_sats} sats")
 
         new_status = get_status(
             payable_amount=order["payable_amount"],
@@ -56,11 +60,14 @@ async def process(tx_id):
         )
 
         if status != new_status:
-            update_order_status(order["id"], new_status)
+            print(f"Order ID:{order['id']} - Updated")
+            result = update_order_status(order["id"], new_status)
+            order = result.data[0]
 
         if new_status in [Status.PAYMENT_RECEIVED, Status.PAYMENT_OVERPAID]:
-            # Ensure no duplicates are processed
-            print("Push to celery")
+            # TODO - Ensure no duplicate orders are processed
+            print("Pushing to celery")
+            inscribe.delay(order)
 
     return parsed_rpc_data
 

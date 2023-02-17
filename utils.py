@@ -4,6 +4,7 @@ from config import supabase
 import json
 from config import session
 
+
 def parse_transaction_data(data):
     result = data.get("result")
 
@@ -92,3 +93,18 @@ def get_order_with_assigned_address(address: str):
         .limit(1)
         .execute()
     )
+
+
+def calculate_fees(size: int, priority_fee: int) -> int:
+    base_network_fee = 292
+    base_fee = 0.00025 * SATS_PER_BTC
+    pct_fee = 0.1
+    segwit_size = size / 4
+    network_fees = (segwit_size + base_network_fee) * priority_fee
+    service_fees = network_fees * pct_fee + base_fee
+
+    return {
+        "network_fees": int(network_fees),
+        "service_fees": int(service_fees),
+        "total_fees": int(network_fees + service_fees),
+    }
