@@ -1,8 +1,9 @@
-from constants import Status, SATS_PER_BTC
-from datetime import datetime
-from config import supabase
 import json
-from config import session
+from datetime import datetime
+import postgrest.exceptions
+
+from config import session, supabase, PORTS
+from constants import SATS_PER_BTC, Chain, Status
 
 
 def parse_transaction_data(data):
@@ -32,41 +33,48 @@ def update_order_status(order_id: int, status: Status):
     )
 
 
-def get_status(payable_amount, amount_received):
+def get_status(payable_amount, amount_received: dict[str, int]):
     """
     Returns the status based on the amount received vs payable amount
     """
-    if amount_received < payable_amount:
-        return Status.PAYMENT_UNDERPAID
-    elif amount_received > payable_amount:
+    unconfirmed_received = amount_received["unconfirmed"]
+    confirmed_received = amount_received["confirmed"]
+
+    if (unconfirmed_received + confirmed_received) > payable_amount:
         return Status.PAYMENT_OVERPAID
-    return Status.PAYMENT_RECEIVED
+
+    if (unconfirmed_received + confirmed_received) < payable_amount:
+        return Status.PAYMENT_UNDERPAID
+
+    if unconfirmed_received == payable_amount:
+        return Status.PAYMENT_RECEIVED_UNCONFIRMED
+    if confirmed_received == payable_amount:
+        return Status.PAYMENT_RECEIVED_CONFIRMED
 
 
-def get_transaction(tx_id: str):
+def get_transaction(tx_id: str, chain: Chain = Chain.MAINNET):
     data = {
         "jsonrpc": "2.0",
         "method": "gettransaction",
         "params": [tx_id],
     }
-
     response = session.post(
-        "http://localhost:8332",
+        f"http://localhost:{PORTS[chain]}",
         data=json.dumps(data),
         headers={"Content-Type": "application/json"},
     )
     return response.json()
 
 
-def insert_tx(order_id, tx_id, data):
+def upsert_tx(order_id, tx_id, data):
     return (
         supabase.table("tx")
-        .insert(
+        .upsert(
             {
                 "order_id": order_id,
                 "tx_hash": tx_id,
-                # "amount_sats": 1,
-                "amount_sats": int(data["amount"] * SATS_PER_BTC),
+                # Using round because of floating arithmetic limitations
+                "amount_sats": round(data["amount"] * SATS_PER_BTC),
                 "confirmations": data["confirmations"],
                 "received_at": datetime.fromtimestamp(data["time_received"]).strftime(
                     "%Y/%m/%d %H:%M:%S"
@@ -96,7 +104,7 @@ def get_order_with_assigned_address(address: str):
 
 
 def calculate_fees(size: int, priority_fee: int) -> int:
-    base_network_fee = 292
+    base_network_fee = 250
     base_fee = 0.00025 * SATS_PER_BTC
     pct_fee = 0.1
     segwit_size = size / 4
@@ -107,4 +115,39 @@ def calculate_fees(size: int, priority_fee: int) -> int:
         "network_fees": int(network_fees),
         "service_fees": int(service_fees),
         "total_fees": int(network_fees + service_fees),
+    }
+
+
+def insert_job(order_id: str):
+    result = None
+    try:
+        result = supabase.table("job").insert({"order_id": order_id}).execute()
+    except postgrest.exceptions.APIError as err:
+        print(err)
+    return result
+
+
+def update_job_status(order_id: str, new_status: str):
+    return (
+        supabase.table("job")
+        .update({"status": new_status})
+        .eq("order_id", order_id)
+        .execute()
+    )
+
+
+def get_total_received_sats(order_id):
+    data = get_all_txs_from_order_id(order_id)
+
+    total_confirmed_received = sum(
+        [item["amount_sats"] if item["confirmations"] > 0 else 0 for item in data]
+    )
+
+    total_unconfirmed_received = sum(
+        [item["amount_sats"] if item["confirmations"] == 0 else 0 for item in data]
+    )
+
+    return {
+        "unconfirmed": total_unconfirmed_received,
+        "confirmed": total_confirmed_received,
     }
