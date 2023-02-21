@@ -1,14 +1,17 @@
 import os
+from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from supabase.client import Client, create_client
-from pathlib import Path
+
 from constants import Chain
 
 load_dotenv()
+
+chain: Chain = Chain.MAINNET
 
 url: str = os.environ.get("SUPABASE_URL")
 key: str = os.environ.get("SUPABASE_KEY")
@@ -32,6 +35,6 @@ def api_key_auth(api_key: str = Depends(oauth2_scheme)):
         )
 
 
-app = FastAPI(dependencies=[Depends(api_key_auth)])
+app = FastAPI()
 
 session = requests.Session()

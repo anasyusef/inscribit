@@ -1,8 +1,9 @@
 import json
 from datetime import datetime
+
 import postgrest.exceptions
 
-from config import session, supabase, PORTS
+from config import PORTS, session, supabase
 from constants import SATS_PER_BTC, Chain, Status
 
 
@@ -13,21 +14,15 @@ def parse_transaction_data(data):
     confirmations = result["confirmations"]
     time_received = result["timereceived"]
 
-    details = result["details"][
-        0
-    ]  # Assuming there is only one item in details that contains the address
-
-    address = details["address"]
-
     return {
         "amount": amount,
         "confirmations": confirmations,
         "time_received": time_received,
-        "address": address,
+        "details": result["details"],
     }
 
 
-def update_order_status(order_id: int, status: Status):
+def update_order_status(order_id: str, status: Status):
     return (
         supabase.table("order").update({"status": status}).eq("id", order_id).execute()
     )
@@ -151,3 +146,24 @@ def get_total_received_sats(order_id):
         "unconfirmed": total_unconfirmed_received,
         "confirmed": total_confirmed_received,
     }
+
+
+def increase_retry_count(order_id: str):
+    try:
+        supabase.rpc("increment", {"row_order_id": order_id}).execute()
+    except Exception as e:
+        print(
+            f"The function might return successfully and the error is a false positive: {e}"
+        )
+        return None
+
+
+def get_inscription_by_commit_tx(tx_id: str):
+    return (
+        supabase.table("inscription")
+        .select("*")
+        .eq("commit", tx_id)
+        .limit(1)
+        .single()
+        .execute()
+    )

@@ -40,6 +40,9 @@ class Status(str, Enum):
     PAYMENT_UNDERPAID = "payment_underpaid"
     PAYMENT_OVERPAID = "payment_overpaid"
     BROADCASTED = "broadcasted"
+    BROADCASTED_CONFIRMED = "broadcasted_confirmed"
+    INSCRIPTION_SENT = "inscription_sent"
+    INSCRIPTION_SENT_CONFIRMED = "inscription_sent_confirmed"
 
 
 class Chain(str, Enum):
