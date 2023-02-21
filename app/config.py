@@ -11,7 +11,8 @@ from .constants import Chain
 
 load_dotenv()
 
-chain: Chain = Chain.MAINNET
+chain: Chain = Chain(os.environ.get("CHAIN"))
+print(f"Loaded with chain: {chain}")
 session = requests.Session()
 
 url: str = os.environ.get("SUPABASE_URL")

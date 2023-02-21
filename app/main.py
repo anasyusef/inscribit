@@ -107,6 +107,7 @@ async def receive():
     """
     Generates wallet receive address
     """
+    
     try:
         result = subprocess.run(
             ["ord", f"--chain={chain}", "wallet", "receive"],

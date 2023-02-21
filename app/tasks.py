@@ -8,13 +8,14 @@ from celery.exceptions import MaxRetriesExceededError
 from celery.utils.log import get_task_logger
 
 from .config import chain, supabase
-from .constants import FILE_EXTS, STORAGE_PATH, Status
+from .constants import FILE_EXTS, PROCESSED_PATH, STORAGE_PATH, Status
 from .utils import (
     calculate_fees,
     increase_retry_count,
     update_job_status,
     update_order_status,
 )
+import shutil
 
 mimetypes.init()
 
@@ -23,7 +24,7 @@ for ext, mime in FILE_EXTS.items():
 
 logger = get_task_logger(__name__)
 
-app = Celery("tasks", backend="redis://")
+app = Celery("tasks", backend="redis://", broker="amqp://guest@127.0.0.1//")
 app.conf.beat_schedule = {
     "index-every-5-mins": {"task": "tasks.index", "schedule": 600},
 }
@@ -77,8 +78,9 @@ def inscribe(self, order, chain="mainnet"):
             )
 
             file_ext = mimetypes.guess_extension(item["metadata"]["mimetype"])
-
-            file_path = os.path.join(STORAGE_PATH, f"{file_name}{file_ext}")
+            file_name_ext = f"{file_name}{file_ext}"
+            file_path = os.path.join(STORAGE_PATH, file_name_ext)
+            file_processed_path = os.path.join(PROCESSED_PATH, file_name_ext)
             logger.info(f"Writing file: {file_path}")
             with open(file_path, "wb") as f:
                 f.write(result)
@@ -92,6 +94,8 @@ def inscribe(self, order, chain="mainnet"):
                 check=False,
             )
 
+            logger.info(f"Moving file to: {file_processed_path}")
+            shutil.move(file_path, file_processed_path)
             decoded_stdout = result.stdout.decode()
             print(result.stdout)
             print(result.stderr)
@@ -117,6 +121,7 @@ def inscribe(self, order, chain="mainnet"):
             ).execute()
         update_job_status(order_id, "completed")
         update_order_status(order_id, Status.BROADCASTED)
+        
     except MaxRetriesExceededError as e:
         logger.error("Marking the job as failed")
         update_job_status(order_id, "failed")

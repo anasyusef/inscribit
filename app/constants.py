@@ -3,8 +3,11 @@ from enum import Enum
 from pathlib import Path
 
 SATS_PER_BTC = 100_000_000
-STORAGE_PATH = os.path.join(Path.home(), "inscription-service", "storage")
-
+STORAGE_PATH = os.path.join(os.path.dirname(Path(__file__).resolve().parent), "storage")
+PROCESSED_PATH = os.path.join(os.path.dirname(Path(__file__).resolve().parent), "processed")
+print("Creating directories if they don't exist")
+Path(STORAGE_PATH).mkdir(parents=True, exist_ok=True)
+Path(PROCESSED_PATH).mkdir(parents=True, exist_ok=True)
 
 FILE_EXTS = {
     ".json": "application/json",

@@ -9,3 +9,47 @@ services:
     image: "rabbitmq"
     ports:
       - "5672:5672"
+  web:
+    build: .
+    image: inscribit-web
+    env_file:
+      - .env
+    volumes:
+      - web_data:/code
+      - ~/.bitcoin:/root/.bitcoin:ro
+      - ~/.local:/root/.local
+    network_mode: "host"
+  beat:
+    build: .
+    image: inscribit-web
+    command: celery beat
+    network_mode: "host"
+    depends_on:
+      - redis
+      - rabbitmq
+  celery:
+    build: .
+    image: inscribit-web
+    env_file:
+      - .env
+    network_mode: "host"
+    command: celery -A app.tasks worker --loglevel=INFO
+    depends_on:
+      - redis
+      - rabbitmq
+  flower:
+    image: mher/flower
+    env_file:
+      - .env
+    network_mode: "host"
+    depends_on:
+      - celery
+      - rabbitmq
+      - redis
+
+volumes:
+  web_data:
+
+secrets:
+  auth_secret:
+    file: flower_auth.txt
