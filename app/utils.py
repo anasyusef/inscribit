@@ -3,8 +3,8 @@ from datetime import datetime
 
 import postgrest.exceptions
 
-from config import PORTS, session, supabase
-from constants import SATS_PER_BTC, Chain, Status
+from .config import PORTS, session, supabase
+from .constants import SATS_PER_BTC, Chain, Status
 
 
 def parse_transaction_data(data):

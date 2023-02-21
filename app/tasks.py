@@ -6,13 +6,15 @@ import subprocess
 from celery import Celery
 from celery.exceptions import MaxRetriesExceededError
 from celery.utils.log import get_task_logger
-from postgrest.exceptions import APIError
 
-from config import chain, supabase
-from constants import FILE_EXTS, STORAGE_PATH, Status
-from utils import (calculate_fees, get_inscription_by_commit_tx,
-                   increase_retry_count, update_job_status,
-                   update_order_status)
+from .config import chain, supabase
+from .constants import FILE_EXTS, STORAGE_PATH, Status
+from .utils import (
+    calculate_fees,
+    increase_retry_count,
+    update_job_status,
+    update_order_status,
+)
 
 mimetypes.init()
 
@@ -172,4 +174,3 @@ def update_send_status(self, tx_id):
         inscription = inscription_data_list[0]
         order_id = inscription["order_id"]
         update_order_status(order_id, Status.INSCRIPTION_SENT_CONFIRMED)
-

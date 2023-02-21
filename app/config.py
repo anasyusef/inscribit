@@ -3,15 +3,16 @@ from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from supabase.client import Client, create_client
 
-from constants import Chain
+from .constants import Chain
 
 load_dotenv()
 
 chain: Chain = Chain.MAINNET
+session = requests.Session()
 
 url: str = os.environ.get("SUPABASE_URL")
 key: str = os.environ.get("SUPABASE_KEY")
@@ -33,8 +34,3 @@ def api_key_auth(api_key: str = Depends(oauth2_scheme)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Forbidden"
         )
-
-
-app = FastAPI()
-
-session = requests.Session()

@@ -2,15 +2,25 @@ import json
 import subprocess
 from pprint import pprint
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 
-from config import COOKIE_PATH, api_key_auth, app, chain, session
-from constants import Status
-from tasks import inscribe, send_inscription, update_send_status
-from utils import (get_inscription_by_commit_tx,
-                   get_order_with_assigned_address, get_status,
-                   get_total_received_sats, get_transaction, insert_job,
-                   parse_transaction_data, update_order_status, upsert_tx)
+from .config import COOKIE_PATH, api_key_auth, chain, session
+from .constants import Status
+from .tasks import inscribe, send_inscription, update_send_status
+from .utils import (
+    get_inscription_by_commit_tx,
+    get_order_with_assigned_address,
+    get_status,
+    get_total_received_sats,
+    get_transaction,
+    insert_job,
+    parse_transaction_data,
+    update_order_status,
+    upsert_tx,
+)
+
+
+app = FastAPI()
 
 
 @app.on_event("startup")
