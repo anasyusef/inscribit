@@ -42,17 +42,11 @@ async def process(tx_id):
     parsed_rpc_data = parse_transaction_data(json_res)
     pprint(parsed_rpc_data)
 
-    # address = parsed_rpc_data["details"][0]["address"]
     if not parsed_rpc_data["details"]:
         print(f"{tx_id} looks like a reveal tx")
         return {"detail": "acked!"}
 
     detail = parsed_rpc_data["details"][0]
-    detail["category"] = "receive"  # TODO - Remove
-    detail[
-        "address"
-    ] = "bc1p8c733v3kp770q6mgu2egcgc6l078adnrsr34y8hveuhuyzrh7w0qfcd34e"  # TODO - Remove
-    parsed_rpc_data["amount"] = 1  # TODO - Remove
 
     if (
         detail.get("label")
