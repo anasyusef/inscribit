@@ -24,7 +24,7 @@ def parse_transaction_data(data):
 
 def update_order_status(order_id: str, status: Status):
     return (
-        supabase.table("order").update({"status": status}).eq("id", order_id).execute()
+        supabase.table("Order").update({"status": status}).eq("id", order_id).execute()
     )
 
 
@@ -35,6 +35,9 @@ def get_status(payable_amount, amount_received: dict[str, int]):
     unconfirmed_received = amount_received["unconfirmed"]
     confirmed_received = amount_received["confirmed"]
 
+    if confirmed_received > payable_amount:
+        return Status.PAYMENT_OVERPAID_CONFIRMED
+
     if (unconfirmed_received + confirmed_received) > payable_amount:
         return Status.PAYMENT_OVERPAID
 
@@ -43,6 +46,7 @@ def get_status(payable_amount, amount_received: dict[str, int]):
 
     if unconfirmed_received == payable_amount:
         return Status.PAYMENT_RECEIVED_UNCONFIRMED
+
     if confirmed_received == payable_amount:
         return Status.PAYMENT_RECEIVED_CONFIRMED
 
@@ -63,7 +67,7 @@ def get_transaction(tx_id: str, chain: Chain = Chain.MAINNET):
 
 def upsert_tx(order_id, tx_id, data):
     return (
-        supabase.table("tx")
+        supabase.table("Transaction")
         .upsert(
             {
                 "order_id": order_id,
@@ -81,14 +85,14 @@ def upsert_tx(order_id, tx_id, data):
 
 
 def get_all_txs_from_order_id(order_id):
-    data = supabase.table("tx").select("*").eq("order_id", order_id).execute()
+    data = supabase.table("Transaction").select("*").eq("order_id", order_id).execute()
     return data.data
 
 
 def get_order_with_assigned_address(address: str):
     return (
-        supabase.table("order")
-        .select("*")
+        supabase.table("File")
+        .select("assigned_taproot_address, Order(*)")
         .eq(
             "assigned_taproot_address",
             address,
@@ -116,7 +120,7 @@ def calculate_fees(size: int, priority_fee: int) -> int:
 def insert_job(order_id: str):
     result = None
     try:
-        result = supabase.table("job").insert({"order_id": order_id}).execute()
+        result = supabase.table("Job").insert({"order_id": order_id}).execute()
     except postgrest.exceptions.APIError as err:
         print(err)
     return result
@@ -124,9 +128,18 @@ def insert_job(order_id: str):
 
 def update_job_status(order_id: str, new_status: str):
     return (
-        supabase.table("job")
+        supabase.table("Job")
         .update({"status": new_status})
         .eq("order_id", order_id)
+        .execute()
+    )
+
+
+def update_file_status(file_id: str, new_status: str):
+    return (
+        supabase.table("File")
+        .update({"status": new_status})
+        .eq("id", file_id)
         .execute()
     )
 
@@ -150,20 +163,9 @@ def get_total_received_sats(order_id):
 
 def increase_retry_count(order_id: str):
     try:
-        supabase.rpc("increment", {"row_order_id": order_id}).execute()
+        supabase.rpc("increment", {"order_id_to_update": order_id}).execute()
     except Exception as e:
         print(
             f"The function might return successfully and the error is a false positive: {e}"
         )
         return None
-
-
-def get_inscription_by_commit_tx(tx_id: str):
-    return (
-        supabase.table("inscription")
-        .select("*")
-        .eq("commit", tx_id)
-        .limit(1)
-        .single()
-        .execute()
-    )

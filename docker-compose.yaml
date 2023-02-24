@@ -37,18 +37,22 @@ services:
     depends_on:
       - redis
       - rabbitmq
+    volumes:
+      - web_data:/code
+      - ~/.bitcoin:/root/.bitcoin:ro
+      - ~/.local:/root/.local
   flower:
     image: mher/flower
     env_file:
       - .env
     network_mode: "host"
     depends_on:
-      - celery
       - rabbitmq
       - redis
 
 volumes:
   web_data:
+
 
 secrets:
   auth_secret:

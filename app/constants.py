@@ -42,6 +42,7 @@ class Status(str, Enum):
     PAYMENT_RECEIVED_CONFIRMED = "payment_received_confirmed"
     PAYMENT_UNDERPAID = "payment_underpaid"
     PAYMENT_OVERPAID = "payment_overpaid"
+    PAYMENT_OVERPAID_CONFIRMED = "payment_overpaid_confirmed"
     BROADCASTED = "broadcasted"
     BROADCASTED_CONFIRMED = "broadcasted_confirmed"
     INSCRIPTION_SENT = "inscription_sent"

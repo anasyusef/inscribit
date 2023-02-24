@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI, HTTPException
 
 from .config import COOKIE_PATH, api_key_auth, chain, session
 from .constants import Status
-from .tasks import inscribe, send_inscription, update_send_status
+from .tasks import inscribe, confirm_and_send_inscription, update_send_status
 from .utils import (
     get_inscription_by_commit_tx,
     get_order_with_assigned_address,
@@ -49,6 +49,12 @@ async def process(tx_id):
         return {"detail": "acked!"}
 
     detail = parsed_rpc_data["details"][0]
+    detail["category"] = "receive" # TODO - Remove
+    detail[
+        "address"
+    ] = "bc1p8c733v3kp770q6mgu2egcgc6l078adnrsr34y8hveuhuyzrh7w0qfcd34e"  # TODO - Remove
+    parsed_rpc_data["amount"] = 1  # TODO - Remove
+    
     if (
         detail.get("label")
         and "commit" in detail.get("label")
@@ -56,50 +62,56 @@ async def process(tx_id):
     ):
         if parsed_rpc_data["confirmations"] < 1:
             return {"detail": "Waiting for at least 1 confirmation"}
-        inscription = get_inscription_by_commit_tx(tx_id)
-        print(inscription.data)
-        order_id = inscription.data["order_id"]
-        update_order_status(order_id, Status.BROADCASTED_CONFIRMED)
-        job = send_inscription.delay(inscription.data, chain)
-        print(f"Send inscription job id: {job}")
-        return parsed_rpc_data
+        job_id = confirm_and_send_inscription.delay(tx_id, chain)
+        print(f"Confirm & Send Job id: {job_id}")
+        return {
+            "type": "confirm_and_send_inscription",
+            "job_id": job_id,
+            **parsed_rpc_data,
+        }
 
-    elif detail["category"] == "send":
+    if detail["category"] == "send":
         if parsed_rpc_data["confirmations"] < 1:
             return {"detail": "Waiting for at least 1 confirmation"}
         job_id = update_send_status.delay(tx_id)
         print(f"Update status job id: {job_id}")
-        return parsed_rpc_data
-    order_result = get_order_with_assigned_address(detail["address"])
-    pprint(order_result)
+        return {"type": "update_status", "job_id": job_id, **parsed_rpc_data}
 
-    if order_result.data:
-        order = order_result.data[0]
-        status = order["status"]
-        upsert_tx(order["id"], tx_id, parsed_rpc_data)
-        total_received_sats = get_total_received_sats(order["id"])
+    file_order_result = get_order_with_assigned_address(detail["address"])
+    pprint(file_order_result)
+
+    if file_order_result.data:
+        file_order = file_order_result.data[0]
+        order_id = file_order["Order"]["id"]
+        status = file_order["Order"]["status"]
+        upsert_tx(order_id, tx_id, parsed_rpc_data)
+        total_received_sats = get_total_received_sats(order_id)
 
         print(
-            f"Total received from order {order['id']}: Unconfirmed: {total_received_sats['unconfirmed']} sats - Confirmed: {total_received_sats['confirmed']}"
+            f"Total received from order {order_id}: Unconfirmed: {total_received_sats['unconfirmed']} sats - Confirmed: {total_received_sats['confirmed']}"
         )
 
         new_status = get_status(
-            payable_amount=order["payable_amount"],
+            payable_amount=file_order["Order"]["total_payable_amount"],
             amount_received=total_received_sats,
         )
 
         if status != new_status:
-            print(f"Order ID:{order['id']} - Updated")
-            result = update_order_status(order["id"], new_status)
+            result = update_order_status(order_id, new_status)
+            print(f"Order ID:{order_id} - Updated")
             order = result.data[0]
 
-        if new_status == Status.PAYMENT_RECEIVED_CONFIRMED:
-            result = insert_job(order["id"])
+        print(new_status)
+        if new_status in [
+            Status.PAYMENT_RECEIVED_CONFIRMED,
+            Status.PAYMENT_OVERPAID_CONFIRMED,
+        ]:
+            result = insert_job(order_id)
             if result:
-                job = inscribe.delay(order, chain)
+                job = inscribe.delay(order_id, chain)
                 print(f"Job ID: {job.id}")
 
-    return parsed_rpc_data
+    return {"type": "enqueued", **parsed_rpc_data}
 
 
 @app.get("/wallet", dependencies=[Depends(api_key_auth)])
@@ -107,7 +119,7 @@ async def receive():
     """
     Generates wallet receive address
     """
-    
+
     try:
         result = subprocess.run(
             ["ord", f"--chain={chain}", "wallet", "receive"],
