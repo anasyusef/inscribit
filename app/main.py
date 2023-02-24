@@ -1,6 +1,5 @@
 import json
 import subprocess
-from pprint import pprint
 
 from fastapi import Depends, FastAPI, HTTPException
 
@@ -17,14 +16,16 @@ from .utils import (
     update_order_status,
     upsert_tx,
 )
+import logging
 
+logger = logging.getLogger()
 
 app = FastAPI()
 
 
 @app.on_event("startup")
 async def startup_event():
-    print(f"Using chain: {chain}")
+    logger.info(f"Using chain: {chain}")
     with open(COOKIE_PATH[chain], "r", encoding="UTF-8") as f:
         auth = f.read().split(":")
         session.auth = tuple(auth)
@@ -34,16 +35,16 @@ async def startup_event():
 async def process(tx_id):
     json_res = get_transaction(tx_id, chain)
 
-    pprint(json_res)
+    logger.debug(json_res)
     if json_res.get("error"):
-        pprint(json_res.get("error"))
+        logger.error(json_res.get("error"))
         raise HTTPException(status_code=500)
 
     parsed_rpc_data = parse_transaction_data(json_res)
-    pprint(parsed_rpc_data)
+    logger.debug(parsed_rpc_data)
 
     if not parsed_rpc_data["details"]:
-        print(f"{tx_id} looks like a reveal tx")
+        logger.info(f"{tx_id} looks like a reveal tx")
         return {"detail": "acked!"}
 
     detail = parsed_rpc_data["details"][0]
@@ -56,7 +57,7 @@ async def process(tx_id):
         if parsed_rpc_data["confirmations"] < 1:
             return {"detail": "Waiting for at least 1 confirmation"}
         job_id = confirm_and_send_inscription.delay(tx_id, chain)
-        print(f"Confirm & Send Job id: {job_id}")
+        logger.debug(f"Confirm & Send Job id: {job_id}")
         return {
             "type": "confirm_and_send_inscription",
             "job_id": job_id,
@@ -73,11 +74,11 @@ async def process(tx_id):
             .eq("send_tx", tx_id)
             .execute()
         )
-        print(result.data)
+        logger.debug(result.data)
         return {"type": "update_status", **parsed_rpc_data}
 
     file_order_result = get_order_with_assigned_address(detail["address"])
-    pprint(file_order_result)
+    logger.debug(file_order_result)
 
     if file_order_result.data:
         file_order = file_order_result.data[0]
@@ -86,7 +87,7 @@ async def process(tx_id):
         upsert_tx(order_id, tx_id, parsed_rpc_data)
         total_received_sats = get_total_received_sats(order_id)
 
-        print(
+        logger.info(
             f"Total received from order {order_id}: Unconfirmed: {total_received_sats['unconfirmed']} sats - Confirmed: {total_received_sats['confirmed']}"
         )
 
@@ -97,10 +98,9 @@ async def process(tx_id):
 
         if status != new_status:
             result = update_order_status(order_id, new_status)
-            print(f"Order ID:{order_id} - Updated")
-            order = result.data[0]
+            logger.info(f"Order ID:{order_id} - Updated")
 
-        print(new_status)
+        logger.info(new_status)
         if new_status in [
             Status.PAYMENT_RECEIVED_CONFIRMED,
             Status.PAYMENT_OVERPAID_CONFIRMED,
@@ -108,7 +108,7 @@ async def process(tx_id):
             result = insert_job(order_id)
             if result:
                 job = inscribe.delay(order_id, chain)
-                print(f"Job ID: {job.id}")
+                logger.debug(f"Job ID: {job.id}")
 
     return {"type": "enqueued", **parsed_rpc_data}
 
@@ -128,7 +128,7 @@ async def receive():
         )
         return json.loads(result.stdout.decode())
     except subprocess.CalledProcessError as err:
-        print(err.stderr)
+        logger.error(err.stderr)
         raise HTTPException(status_code=500) from err
 
 

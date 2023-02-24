@@ -40,6 +40,8 @@ services:
     volumes:
       - web_data:/code
       - ~/.bitcoin:/root/.bitcoin:ro
+      - ./processed:/code/processed
+      - ./storage:/code/storage
       - ~/.local:/root/.local
   flower:
     image: mher/flower

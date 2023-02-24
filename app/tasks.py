@@ -81,7 +81,7 @@ def inscribe(self, order_id, chain="mainnet"):
 
         for item in result:
             file_name = item["name"]
-            update_file_status(file_name, "processing")
+            update_file_status(file_name, "inscribing")
             object_id = item["id"]
             result = (
                 supabase.storage()
@@ -113,13 +113,12 @@ def inscribe(self, order_id, chain="mainnet"):
             if decoded_stdout:
                 logger.info(decoded_stdout)
                 parsed_result = json.loads(decoded_stdout)
-                update_file_status(file_name, "inscribing")
                 logger.info(f"Moving file to: {file_processed_path}")
                 shutil.move(file_path, file_processed_path)
             else:
                 logger.error(result.stderr)
                 logger.error("Couldn't inscribe. Retrying task...")
-                update_file_status(file_name, "failed")
+                update_file_status(file_name, "failed_to_inscribe")
                 increase_retry_count(order_id)
                 self.retry()
 
@@ -143,37 +142,44 @@ def inscribe(self, order_id, chain="mainnet"):
         raise e
 
 
-@app.task
-def confirm_and_send_inscription(tx_id, chain="mainnet"):
-    file_row = (
-        supabase.table("File")
-        .select("*")
-        .eq("commit_tx", tx_id)
-        .limit(1)
-        .single()
-        .execute()
-    )
-    file_data = file_row.data
+@app.task(bind=True, default_retry_delay=60, max_retries=3)
+def confirm_and_send_inscription(self, tx_id, chain="mainnet"):
+    try:
+        file_row = (
+            supabase.table("File")
+            .select("*")
+            .eq("commit_tx", tx_id)
+            .limit(1)
+            .single()
+            .execute()
+        )
+        file_data = file_row.data
 
-    update_file_status(file_data["id"], Status.BROADCASTED_CONFIRMED)
+        update_file_status(file_data["id"], Status.BROADCASTED_CONFIRMED)
 
-    recipient_address = file_data["recipient_address"]
-    inscription_id = file_data["inscription_id"]
+        recipient_address = file_data["recipient_address"]
+        inscription_id = file_data["inscription_id"]
 
-    cmd = f"ord --chain={chain} wallet send {recipient_address} {inscription_id} --fee-rate=20"
-    logger.info(cmd)
-    result = subprocess.run(
-        cmd.split(),
-        stderr=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        check=False,
-    )
+        cmd = f"ord --chain={chain} wallet send {recipient_address} {inscription_id} --fee-rate=20"
+        logger.info(cmd)
+        result = subprocess.run(
+            cmd.split(),
+            stderr=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            check=False,
+        )
 
-    result = result.stdout.decode()
-    if result:
-        logger.info(f"Inscription sent: {result}")
-        supabase.table("File").update(
-            {"send_tx": result.strip(), "status": Status.INSCRIPTION_SENT}
-        ).eq("id", file_data["id"]).execute()
-    else:
-        logger.error(f"Couldn't send inscription {result.stderr}")
+        decoded_result = result.stdout.decode()
+        if decoded_result:
+            logger.info(f"Inscription sent: {decoded_result}")
+            supabase.table("File").update(
+                {"send_tx": decoded_result.strip(), "status": Status.INSCRIPTION_SENT}
+            ).eq("id", file_data["id"]).execute()
+        else:
+            logger.error(f"Couldn't send inscription: {result.stderr}")
+            self.retry()
+    except MaxRetriesExceededError as e:
+        logger.error("Marking the file as failed")
+        update_file_status(file_data["id"], "failed_to_send")
+        raise e
+
