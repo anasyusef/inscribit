@@ -14,7 +14,6 @@ from .utils import (
     increase_retry_count,
     update_file_status,
     update_job_status,
-    update_order_status,
 )
 import shutil
 
@@ -177,24 +176,4 @@ def confirm_and_send_inscription(tx_id, chain="mainnet"):
             {"send_tx": result.strip(), "status": Status.INSCRIPTION_SENT}
         ).eq("id", file_data["id"]).execute()
     else:
-        logger.error(f"Couldn't send inscription {result.stderr.decode()}")
-
-
-@app.task(bind=True, default_retry_delay=30, max_retries=3)
-def update_send_status(self, tx_id):
-    result = (
-        supabase.table("File")
-        .update({"status": Status.INSCRIPTION_SENT_CONFIRMED})
-        .eq("send_tx", tx_id)
-        .execute()
-    ).data
-    print(result)
-    # if not inscription_data_list:
-    #     print(
-    #         f"Couldn't find send_tx with tx id: {tx_id}. Retry count: {update_send_status.request.retries}"
-    #     )
-    #     self.retry()
-    # else:
-    #     inscription = inscription_data_list[0]
-    #     order_id = inscription["order_id"]
-    #     update_order_status(order_id, Status.INSCRIPTION_SENT_CONFIRMED)
+        logger.error(f"Couldn't send inscription {result.stderr}")

@@ -4,11 +4,10 @@ from pprint import pprint
 
 from fastapi import Depends, FastAPI, HTTPException
 
-from .config import COOKIE_PATH, api_key_auth, chain, session
+from .config import COOKIE_PATH, api_key_auth, chain, session, supabase
 from .constants import Status
-from .tasks import inscribe, confirm_and_send_inscription, update_send_status
+from .tasks import inscribe, confirm_and_send_inscription
 from .utils import (
-    get_inscription_by_commit_tx,
     get_order_with_assigned_address,
     get_status,
     get_total_received_sats,
@@ -49,12 +48,12 @@ async def process(tx_id):
         return {"detail": "acked!"}
 
     detail = parsed_rpc_data["details"][0]
-    detail["category"] = "receive" # TODO - Remove
+    detail["category"] = "receive"  # TODO - Remove
     detail[
         "address"
     ] = "bc1p8c733v3kp770q6mgu2egcgc6l078adnrsr34y8hveuhuyzrh7w0qfcd34e"  # TODO - Remove
     parsed_rpc_data["amount"] = 1  # TODO - Remove
-    
+
     if (
         detail.get("label")
         and "commit" in detail.get("label")
@@ -73,9 +72,15 @@ async def process(tx_id):
     if detail["category"] == "send":
         if parsed_rpc_data["confirmations"] < 1:
             return {"detail": "Waiting for at least 1 confirmation"}
-        job_id = update_send_status.delay(tx_id)
-        print(f"Update status job id: {job_id}")
-        return {"type": "update_status", "job_id": job_id, **parsed_rpc_data}
+
+        result = (
+            supabase.table("File")
+            .update({"status": Status.INSCRIPTION_SENT_CONFIRMED})
+            .eq("send_tx", tx_id)
+            .execute()
+        )
+        print(result.data)
+        return {"type": "update_status", **parsed_rpc_data}
 
     file_order_result = get_order_with_assigned_address(detail["address"])
     pprint(file_order_result)
