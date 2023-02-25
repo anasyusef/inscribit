@@ -127,7 +127,7 @@ async def process(tx_id):
             else:
                 logger.info(f"Job with assigned order id {order_id} already exists")
 
-    return {"type": "enqueued", **parsed_rpc_data}
+    return {**parsed_rpc_data}
 
 
 @app.get("/wallet", dependencies=[Depends(api_key_auth)])

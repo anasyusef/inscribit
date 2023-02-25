@@ -78,7 +78,7 @@ def do_inscribe(self, supabase_file, order_id, user_id, priority_fee, chain="mai
             increase_retry_count(file_name)
             self.retry(exc=e)
 
-        cmd = f"ord --chain={chain} wallet inscribe --dry-run {file_path} --fee-rate {priority_fee}"
+        cmd = f"ord --chain={chain} wallet inscribe {file_path} --fee-rate {priority_fee}"
         logger.debug(cmd)
         result = subprocess.run(
             cmd.split(),
