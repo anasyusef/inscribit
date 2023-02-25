@@ -76,8 +76,3 @@ services:
 volumes:
   redis-data:
   rabbitmq-data:
-
-
-secrets:
-  auth_secret:
-    file: flower_auth.txt
