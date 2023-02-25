@@ -15,7 +15,7 @@ services:
     env_file:
       - .env
     volumes:
-      - web_data:/code
+      # - web_data:/code
       - ~/.bitcoin:/root/.bitcoin:ro
       - ~/.local:/root/.local
     network_mode: "host"
@@ -33,12 +33,12 @@ services:
     env_file:
       - .env
     network_mode: "host"
-    command: celery -A app.tasks worker --loglevel=INFO
+    command: celery -A app.tasks worker --loglevel=INFO -c 1
     depends_on:
       - redis
       - rabbitmq
     volumes:
-      - web_data:/code
+      # - web_data:/code
       - ~/.bitcoin:/root/.bitcoin:ro
       - ./processed:/code/processed
       - ./storage:/code/storage
@@ -52,8 +52,8 @@ services:
       - rabbitmq
       - redis
 
-volumes:
-  web_data:
+# volumes:
+#   web_data:
 
 
 secrets:
