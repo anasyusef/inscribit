@@ -5,9 +5,8 @@ import subprocess
 
 from celery import Celery
 from celery.exceptions import MaxRetriesExceededError
-from celery.utils.log import get_task_logger
 
-from .config import chain, supabase
+from .config import chain, supabase, logtail_source_token
 from .constants import FILE_EXTS, PROCESSED_PATH, STORAGE_PATH, Status
 from .utils import (
     calculate_fees,
@@ -16,13 +15,21 @@ from .utils import (
     update_job_status,
 )
 import shutil
+from logtail import LogtailHandler
+import logging
 
 mimetypes.init()
 
 for ext, mime in FILE_EXTS.items():
     mimetypes.add_type(mime, ext)
 
-logger = get_task_logger(__name__)
+handler = LogtailHandler(source_token=logtail_source_token)
+
+
+logger = logging.getLogger(__name__)
+logger.handlers = []
+logger.setLevel(logging.DEBUG)
+logger.addHandler(handler)
 
 app = Celery("tasks", backend="redis://", broker="amqp://guest@127.0.0.1//")
 app.conf.beat_schedule = {
@@ -182,4 +189,3 @@ def confirm_and_send_inscription(self, tx_id, chain="mainnet"):
         logger.error("Marking the file as failed")
         update_file_status(file_data["id"], "failed_to_send")
         raise e
-

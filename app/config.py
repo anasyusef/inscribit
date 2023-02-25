@@ -18,6 +18,7 @@ session = requests.Session()
 url: str = os.environ.get("SUPABASE_URL")
 key: str = os.environ.get("SUPABASE_KEY")
 secret_api_key: str = os.environ.get("SECRET_API_KEY")
+logtail_source_token: str = os.environ.get("LOGTAIL_SOURCE_TOKEN")
 supabase: Client = create_client(url, key)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")  # use token authentication

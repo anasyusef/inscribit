@@ -3,7 +3,14 @@ import subprocess
 
 from fastapi import Depends, FastAPI, HTTPException
 
-from .config import COOKIE_PATH, api_key_auth, chain, session, supabase
+from .config import (
+    COOKIE_PATH,
+    api_key_auth,
+    chain,
+    session,
+    supabase,
+    logtail_source_token,
+)
 from .constants import Status
 from .tasks import inscribe, confirm_and_send_inscription
 from .utils import (
@@ -16,9 +23,17 @@ from .utils import (
     update_order_status,
     upsert_tx,
 )
+
+from logtail import LogtailHandler
 import logging
 
-logger = logging.getLogger()
+handler = LogtailHandler(source_token=logtail_source_token)
+
+
+logger = logging.getLogger(__name__)
+logger.handlers = []
+logger.setLevel(logging.DEBUG)
+logger.addHandler(handler)
 
 app = FastAPI()
 
