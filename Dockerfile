@@ -11,10 +11,8 @@ RUN git clone https://github.com/casey/ord.git && cd ord && cargo build --releas
 
 RUN mv ord/target/release/ord /usr/bin/
 
-COPY ./log.ini /code/log.ini
 
 COPY ./requirements.txt /code/requirements.txt
-
 RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
 
 # Update default packages
@@ -26,6 +24,7 @@ RUN apt-get install -y \
     curl \
     libssl-dev
 
+COPY ./log.ini /code/log.ini
 COPY ./app /code/app
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80", "--log-config", "log.ini"]

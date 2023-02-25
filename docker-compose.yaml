@@ -32,6 +32,12 @@ services:
     depends_on:
       - redis
       - rabbitmq
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
   celery:
     build: .
     image: inscribit-web
@@ -48,6 +54,12 @@ services:
       - ./processed:/code/processed
       - ./storage:/code/storage
       - ~/.local:/root/.local
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
   flower:
     image: mher/flower
     env_file:
