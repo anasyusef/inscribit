@@ -58,7 +58,7 @@ def get_transaction(tx_id: str, chain: Chain = Chain.MAINNET):
         "params": [tx_id],
     }
     response = session.post(
-        f"http://localhost:{PORTS[chain]}",
+        f"http://127.0.0.1:{PORTS[chain]}",
         data=json.dumps(data),
         headers={"Content-Type": "application/json"},
     )
