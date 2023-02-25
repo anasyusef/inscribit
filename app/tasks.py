@@ -175,8 +175,9 @@ def confirm_and_send_inscription(self, tx_id, chain="mainnet"):
         file_data_list = file_row.data
 
         if not file_data_list:
-            logger.warn(f"Couldn't find a file with commit tx: {tx_id}")
-            self.retry()
+            msg = f"Couldn't find a file with commit tx: {tx_id}"
+            logger.warn(msg)
+            return msg
 
         file_data = file_data_list[0]
 
