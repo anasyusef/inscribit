@@ -22,8 +22,13 @@ services:
   beat:
     build: .
     image: inscribit-web
-    command: celery beat
+    command: celery -A app.tasks beat --loglevel=INFO
     network_mode: "host"
+    env_file:
+      - .env
+    volumes:
+      - ~/.bitcoin:/root/.bitcoin:ro
+      - ~/.local:/root/.local
     depends_on:
       - redis
       - rabbitmq

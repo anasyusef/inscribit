@@ -33,7 +33,7 @@ logger.addHandler(handler)
 
 app = Celery("tasks", backend="redis://", broker="amqp://guest@127.0.0.1//")
 app.conf.beat_schedule = {
-    "index-every-5-mins": {"task": "tasks.index", "schedule": 600},
+    "index-every-5-mins": {"task": "app.tasks.index", "schedule": 300},
 }
 app.conf.timezone = "UTC"
 
@@ -50,10 +50,8 @@ def index():
         check=False,
     )
 
-    if result.stdout.decode():
-        logger.info(f"stdout: {result.stdout.decode()}")
-    if result.stderr.decode():
-        logger.error(f"stderr: {result.stderr.decode()}")
+    logger.info(f"stdout: {result.stdout.decode()}")
+    logger.error(f"stderr: {result.stderr.decode()}")
 
 
 @app.task(bind=True, default_retry_delay=60, max_retries=3)
