@@ -9,6 +9,7 @@ services:
       - redis-data:/data
   rabbitmq:
     image: "rabbitmq:3-management"
+    hostname: 'mabbit'
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     ports:
