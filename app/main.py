@@ -71,11 +71,11 @@ async def process(tx_id):
     ):
         if parsed_rpc_data["confirmations"] < 1:
             return {"detail": "Waiting for at least 1 confirmation"}
-        job_id = confirm_and_send_inscription.delay(tx_id, chain)
-        logger.debug(f"Confirm & Send Job id: {job_id}")
+        job = confirm_and_send_inscription.delay(tx_id, chain)
+        logger.debug(f"Confirm & Send Job id: {job.id}")
         return {
             "type": "confirm_and_send_inscription",
-            "job_id": job_id,
+            "job_id": job.id,
             **parsed_rpc_data,
         }
 

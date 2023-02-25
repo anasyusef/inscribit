@@ -78,7 +78,9 @@ def do_inscribe(self, supabase_file, order_id, user_id, priority_fee, chain="mai
             increase_retry_count(file_name)
             self.retry(exc=e)
 
-        cmd = f"ord --chain={chain} wallet inscribe {file_path} --fee-rate {priority_fee}"
+        cmd = (
+            f"ord --chain={chain} wallet inscribe {file_path} --fee-rate {priority_fee}"
+        )
         logger.debug(cmd)
         result = subprocess.run(
             cmd.split(),
@@ -200,8 +202,8 @@ def confirm_and_send_inscription(self, tx_id, chain="mainnet"):
             ).eq("id", file_data["id"]).execute()
         else:
             logger.error(f"Couldn't send inscription: {result.stderr}")
+            update_file_status(file_data["id"], "failed_to_send")
             self.retry()
     except MaxRetriesExceededError as e:
         logger.error("Marking the file as failed")
-        update_file_status(file_data["id"], "failed_to_send")
         raise e

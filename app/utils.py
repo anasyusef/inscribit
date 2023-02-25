@@ -103,7 +103,7 @@ def get_order_with_assigned_address(address: str):
 
 
 def calculate_fees(size: int, priority_fee: int) -> int:
-    base_network_fee = 292
+    base_network_fee = 300
     base_fee = 0.00025 * SATS_PER_BTC
     pct_fee = 0.1
     segwit_size = size / 4
