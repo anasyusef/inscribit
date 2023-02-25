@@ -42,7 +42,7 @@ app.conf.timezone = "UTC"
 def index():
     logger.info(f"Indexing {chain}")
     cmd = f"ord --chain={chain} index"
-    logger.info(cmd)
+    logger.debug(cmd)
     result = subprocess.run(
         cmd.split(),
         stderr=subprocess.PIPE,
@@ -52,6 +52,71 @@ def index():
 
     logger.info(f"stdout: {result.stdout.decode()}")
     logger.error(f"stderr: {result.stderr.decode()}")
+
+
+@app.task(bind=True, default_retry_delay=90, max_retries=3)
+def do_inscribe(self, supabase_file, order_id, user_id, priority_fee, chain="mainnet"):
+    file_name = supabase_file["name"]
+    object_id = supabase_file["id"]
+    try:
+        update_file_status(file_name, "inscribing")
+        result = (
+            supabase.storage()
+            .from_("orders")
+            .download(f"{user_id}/{order_id}/{file_name}")
+        )
+
+        file_ext = mimetypes.guess_extension(supabase_file["metadata"]["mimetype"])
+        file_name_ext = f"{file_name}{file_ext}"
+        file_path = os.path.join(STORAGE_PATH, file_name_ext)
+        file_processed_path = os.path.join(PROCESSED_PATH, file_name_ext)
+        logger.info(f"Writing file: {file_path}")
+        try:
+            with open(file_path, "wb") as f:
+                f.write(result)
+        except Exception as e:
+            increase_retry_count(file_name)
+            self.retry(exc=e)
+
+        cmd = f"ord --chain={chain} wallet inscribe --dry-run {file_path} --fee-rate {priority_fee}"
+        logger.debug(cmd)
+        result = subprocess.run(
+            cmd.split(),
+            stderr=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            check=False,
+        )
+
+        decoded_stdout = result.stdout.decode()
+
+        parsed_result = None
+
+        if decoded_stdout:
+            logger.info(decoded_stdout)
+            parsed_result = json.loads(decoded_stdout)
+            logger.info(f"Moving file to: {file_processed_path}")
+            shutil.move(file_path, file_processed_path)
+        else:
+            logger.error(result.stderr)
+            logger.error("Couldn't inscribe. Retrying task...")
+            increase_retry_count(file_name)
+            self.retry()
+
+        logger.info(f"Inserting object id: {object_id} and order id: {order_id}")
+
+        supabase.table("File").update(
+            {
+                "object_id": object_id,
+                "commit_tx": parsed_result["commit"],
+                "reveal_tx": parsed_result["reveal"],
+                "inscription_id": parsed_result["inscription"],
+                "fees": parsed_result["fees"],
+            }
+        ).eq("order_id", order_id).eq("id", file_name).execute()
+        update_file_status(file_name, Status.BROADCASTED)
+    except MaxRetriesExceededError as e:
+        logger.error(f"Couldn't inscribe file {supabase_file}")
+        update_file_status(file_name, "failed_to_inscribe")
 
 
 @app.task(bind=True, default_retry_delay=60, max_retries=3)
@@ -87,80 +152,31 @@ def inscribe(self, order_id, chain="mainnet"):
             return None
 
         for item in result:
-            file_name = item["name"]
-            update_file_status(file_name, "inscribing")
-            object_id = item["id"]
-            result = (
-                supabase.storage()
-                .from_("orders")
-                .download(f"{user_id}/{order_id}/{file_name}")
-            )
-
-            file_ext = mimetypes.guess_extension(item["metadata"]["mimetype"])
-            file_name_ext = f"{file_name}{file_ext}"
-            file_path = os.path.join(STORAGE_PATH, file_name_ext)
-            file_processed_path = os.path.join(PROCESSED_PATH, file_name_ext)
-            logger.info(f"Writing file: {file_path}")
-            with open(file_path, "wb") as f:
-                f.write(result)
-
-            cmd = f"ord --chain={chain} wallet inscribe {file_path} --fee-rate {priority_fee}"
-            logger.info(cmd)
-            result = subprocess.run(
-                cmd.split(),
-                stderr=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                check=False,
-            )
-
-            decoded_stdout = result.stdout.decode()
-
-            parsed_result = None
-
-            if decoded_stdout:
-                logger.info(decoded_stdout)
-                parsed_result = json.loads(decoded_stdout)
-                logger.info(f"Moving file to: {file_processed_path}")
-                shutil.move(file_path, file_processed_path)
-            else:
-                logger.error(result.stderr)
-                logger.error("Couldn't inscribe. Retrying task...")
-                update_file_status(file_name, "failed_to_inscribe")
-                increase_retry_count(order_id)
-                self.retry()
-
-            logger.info(f"Inserting object id: {object_id} and order id: {order_id}")
-
-            supabase.table("File").update(
-                {
-                    "object_id": object_id,
-                    "commit_tx": parsed_result["commit"],
-                    "reveal_tx": parsed_result["reveal"],
-                    "inscription_id": parsed_result["inscription"],
-                    "fees": parsed_result["fees"],
-                }
-            ).eq("order_id", order_id).eq("id", file_name).execute()
-            update_file_status(file_name, Status.BROADCASTED)
+            do_inscribe.delay(item, order_id, user_id, priority_fee, chain)
         update_job_status(order_id, "completed")
 
     except MaxRetriesExceededError as e:
         logger.error("Marking the job as failed")
         update_job_status(order_id, "failed")
         raise e
+    except Exception as e:
+        self.retry(exc=e)  # Does it introduce infinite retries?
 
 
 @app.task(bind=True, default_retry_delay=60, max_retries=3)
 def confirm_and_send_inscription(self, tx_id, chain="mainnet"):
+    logger.debug(f"Commit tx: {tx_id}")
     try:
         file_row = (
-            supabase.table("File")
-            .select("*")
-            .eq("commit_tx", tx_id)
-            .limit(1)
-            .single()
-            .execute()
+            supabase.table("File").select("*").eq("commit_tx", tx_id).limit(1).execute()
         )
-        file_data = file_row.data
+        file_data_list = file_row.data
+
+        if not file_data_list:
+            logger.warn(f"Couldn't find a file with commit tx: {tx_id}")
+            self.retry()
+
+        file_data = file_data_list[0]
 
         update_file_status(file_data["id"], Status.BROADCASTED_CONFIRMED)
 
@@ -168,7 +184,7 @@ def confirm_and_send_inscription(self, tx_id, chain="mainnet"):
         inscription_id = file_data["inscription_id"]
 
         cmd = f"ord --chain={chain} wallet send {recipient_address} {inscription_id} --fee-rate=20"
-        logger.info(cmd)
+        logger.debug(cmd)
         result = subprocess.run(
             cmd.split(),
             stderr=subprocess.PIPE,

@@ -161,9 +161,9 @@ def get_total_received_sats(order_id):
     }
 
 
-def increase_retry_count(order_id: str):
+def increase_retry_count(row_id: str):
     try:
-        supabase.rpc("increment", {"order_id_to_update": order_id}).execute()
+        supabase.rpc("increment", {"row_id": row_id}).execute()
     except Exception as e:
         print(
             f"The function might return successfully and the error is a false positive: {e}"

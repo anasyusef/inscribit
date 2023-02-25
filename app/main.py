@@ -113,7 +113,7 @@ async def process(tx_id):
 
         if status != new_status:
             result = update_order_status(order_id, new_status)
-            logger.info(f"Order ID:{order_id} - Updated")
+            logger.info(f"Order ID: {order_id} - Updated")
 
         logger.info(new_status)
         if new_status in [

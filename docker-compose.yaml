@@ -5,17 +5,21 @@ services:
     ports:
       - "6379:6379"
     command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis-data:/data
   rabbitmq:
-    image: "rabbitmq"
+    image: "rabbitmq:3-management"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
     ports:
       - "5672:5672"
+      - "15672:15672"
   web:
     build: .
     image: inscribit-web
     env_file:
       - .env
     volumes:
-      # - web_data:/code
       - ~/.bitcoin:/root/.bitcoin:ro
       - ~/.local:/root/.local
     network_mode: "host"
@@ -69,8 +73,9 @@ services:
       - rabbitmq
       - redis
 
-# volumes:
-#   web_data:
+volumes:
+  redis-data:
+  rabbitmq-data:
 
 
 secrets:
