@@ -77,7 +77,9 @@ def inscribe(self, order_id, chain="mainnet"):
             fee = calculate_fees(file_size, priority_fee)
             total_file_fees += fee["total_fees"]
         do_fees_match = total_file_fees == order["total_payable_amount"]
-
+        logger.info(
+            f"Total payable amount: {total_file_fees} - Total payable amount: {order['total_payable_amount']}"
+        )
         if not do_fees_match:
             logger.warn(
                 f"Fees do not match - Payable amount: {order['total_payable_amount']} sats - Fees: {total_file_fees} sats"

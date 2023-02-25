@@ -124,6 +124,8 @@ async def process(tx_id):
             if result:
                 job = inscribe.delay(order_id, chain)
                 logger.debug(f"Job ID: {job.id}")
+            else:
+                logger.info(f"Job with assigned order id {order_id} already exists")
 
     return {"type": "enqueued", **parsed_rpc_data}
 
