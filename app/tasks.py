@@ -2,6 +2,7 @@ import json
 import mimetypes
 import os
 import subprocess
+import requests
 
 from celery import Celery
 from celery.exceptions import MaxRetriesExceededError
@@ -9,7 +10,7 @@ from celery.exceptions import MaxRetriesExceededError
 from .config import chain, supabase, logtail_source_token
 from .constants import FILE_EXTS, PROCESSED_PATH, STORAGE_PATH, Status
 from .utils import (
-    calculate_fees,
+    # calculate_fees,
     increase_retry_count,
     update_file_status,
     update_job_status,
@@ -66,16 +67,11 @@ def do_inscribe(self, file_, order_id, user_id, chain="mainnet"):
             .download(f"{user_id}/{order_id}/{file_id}")
         )
 
-        fees = calculate_fees(len(result), priority_fee)
+        file_size = len(result)
 
-        if file_["payable_amount"] < fees["total_fees"]:
+        if file_["size"] != len(result):
             raise RuntimeError(
-                f"Fees do not match - Payable amount: {file_['payable_amount']} sats - Fees: {fees['total_fees']} sats"
-            )
-        elif fees["total_fees"] > file_["payable_amount"]:
-            logger.warn("Fees is higher than payable amount")
-            logger.warn(
-                f"Payable amount: {file_['payable_amount']} sats - Fees: {fees['total_fees']} sats"
+                f"Size of the file on db != actual size: {file_['size']} bytes - Fees: {file_size} bytes"
             )
 
         file_ext = mimetypes.guess_extension(file_["mime_type"])
@@ -133,6 +129,9 @@ def inscribe(self, order_id, chain="mainnet"):
             .eq("status", "pending")
             .execute()
         )
+        if len(files.data) == 0:
+            logger.warn(f"Couldn't find any files with pending status and order id: {order_id}")
+            return
         # Since all files will have the same settings for now, we can just take the first one and make that the setting for all files
         single_file_result = files.data[0]
         order = single_file_result["Order"]
@@ -197,7 +196,11 @@ def confirm_and_send_inscription(self, tx_id, chain="mainnet"):
 
     update_file_status(file_data["id"], Status.BROADCASTED_CONFIRMED)
     try:
-        cmd = f"ord --chain={chain} wallet send {recipient_address} {inscription_id} --fee-rate=20"
+        fee_rate = 20
+        res = requests.get("https://mempool.space/api/v1/fees/recommended")
+        if res.ok:
+            fee_rate = res.json()["fastestFee"]
+        cmd = f"ord --chain={chain} wallet send {recipient_address} {inscription_id} --fee-rate={fee_rate}"
         logger.debug(cmd)
         result = subprocess.run(
             cmd.split(),
