@@ -104,16 +104,18 @@ def get_order_with_assigned_address(address: str):
 
 def calculate_fees(size: int, priority_fee: int) -> int:
     base_network_fee = 300
-    base_fee = 0.00025 * SATS_PER_BTC
+    inscription_value = 10_000  # Every inscription needs 10,000 sats
+    base_fee = 0.0001 * SATS_PER_BTC  # Base service fee
     pct_fee = 0.1
     segwit_size = size / 4
-    network_fees = (segwit_size + base_network_fee) * priority_fee
-    service_fees = 0 * (network_fees * pct_fee + base_fee)
+    network_fees = (segwit_size + base_network_fee) * priority_fee + inscription_value
+    service_fees = ((network_fees + inscription_value) * pct_fee + base_fee)
 
     return {
         "network_fees": int(network_fees),
-        "service_fees": int(service_fees), # Temporarily removing the fees
+        "service_fees": int(service_fees),  # Temporarily removing the fees
         "total_fees": int(network_fees + service_fees),
+        "inscription_value": inscription_value
     }
 
 

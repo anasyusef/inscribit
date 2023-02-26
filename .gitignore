@@ -5,3 +5,4 @@ celerybeat-schedule
 storage
 processed
 *.log
+*.csv
